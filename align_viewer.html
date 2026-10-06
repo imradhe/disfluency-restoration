@@ -176,16 +176,17 @@ function parseRsml(text) {
     const words = [];
     for (const g of groups) {
       if (!g.rest.length) continue;
-      const t = g.t, text = g.rest[g.rest.length - 1];
+      // The word line is "word", or "word<TAB><TAB>phones" when the file carries pronunciations (Switchboard conversions).
+      const t = g.t, [text, phones = ""] = g.rest[g.rest.length - 1].split("\t\t");
       const meta = {};
       if (g.rest.length > 1) for (const kv of g.rest[0].split("|")) {
         const k = kv.indexOf("="); if (k > 0) meta[LEGACY_KEYS[kv.slice(0, k)] || kv.slice(0, k)] = kv.slice(k + 1);
       }
       const s = sec(t[1], t[2], t[3], t[4]), e = sec(t[5], t[6], t[7], t[8]);
       const dur = e - s;
-      // kind: word | hesitation | isolated | span | written | punctuation (older files without metadata: guess from the text)
+      // kind: word | hesitation | isolated | span | normalized | punctuation (older files without metadata: guess from the text)
       const kind = meta.kind || (dur === 0 ? "span" : text.startsWith("@") ? "hesitation" : "word");
-      words.push({ s, e, t: text, dur, meta, kind, marker: dur === 0, flag: false, why: [] });
+      words.push({ s, e, t: text.trim(), phones: phones.trim(), dur, meta, kind, marker: dur === 0, flag: false, why: [] });
     }
     out.push({
       id: b[0].trim(), meta, text: plain.join(" "), words,
@@ -270,15 +271,16 @@ const metaLine = w => {
   if (num(m.voiced_fraction) !== null) bits.push(`${Math.round(m.voiced_fraction * 100)}% voiced`);
   if (num(m.pause_after_milliseconds) !== null) bits.push(`pause ${m.pause_after_milliseconds} ms (${Math.round((m.pause_voiced_fraction || 0) * 100)}% voiced)`);
   if (m.kind) bits.push(m.kind + (m.script ? " · " + m.script : ""));
+  if (w.phones) bits.push(`phones ${w.phones}`);
   return bits.join("  ·  ");
 };
 const tip = w => `${w.t}\n${fmt(w.s)} → ${fmt(w.e)}\n${w.marker ? "zero-length (tag / punctuation)" : Math.round(w.dur * 1000) + " ms"}` +
-  (Object.keys(w.meta).length ? "\n" + metaLine(w) : "") + (w.why.length ? "\n⚠ " + w.why.join("; ") : "");
+  (Object.keys(w.meta).length || w.phones ? "\n" + metaLine(w) : "") + (w.why.length ? "\n⚠ " + w.why.join("; ") : "");
 const setMsg = m => { $("msg").textContent = m; };
 
 const num = v => (v === undefined || v === "" ? null : +v);
 
-// Why a word deserves a second look. Zero-length = tag / written form, never flagged as a squeezed word.
+// Why a word deserves a second look. Zero-length = tag / normalized form, never flagged as a squeezed word.
 function updateFlags() {
   const th = +$("confTh").value;
   let n = 0;

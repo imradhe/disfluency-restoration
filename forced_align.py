@@ -41,7 +41,7 @@ Tags (the lists are in the RSML [tags] block):
               pause between the neighbouring words (shared if several); zero-length if the words touch
   span        @repetition-start / -end, @false-start-start / -end, ... mark a stretch of words and have no duration:
               an -end sits where the previous word ends, a -start where the next word starts
-Other annotations: #NUM[two](2), [cameya](camera), !en[..](..) -> the bracketed *spoken* form is aligned, the (written
+Other annotations: #NUM[two](2), [cameya](camera), !en[..](..) -> the bracketed *verbatim* form is aligned, the (normalized
 form) is not. Blocks that are not segments (the config trailer) are copied through unchanged.
 
 Word metadata (--word-meta), a `key=value|key=value` line like the segment metadata line:
@@ -53,7 +53,7 @@ Word metadata (--word-meta), a `key=value|key=value` line like the segment metad
     pause_after_milliseconds   time until the next spoken word
     pause_voiced_fraction      fraction of that pause that contains speech, i.e. audio no word accounts for (an omitted
                                word, a breath); catches what confidence cannot: a missing word next to a hesitation
-    kind                       word | hesitation | isolated | span | written | punctuation | untransliterated
+    kind                       word | hesitation | isolated | span | normalized | punctuation | untransliterated
     script                     script of the spoken letters (telugu, latin, ...): shows code-switching
     flagged                    1 if confidence < --flag-confidence (default 0.3), else 0
 
@@ -83,9 +83,9 @@ NEG = -1e30
 TS_RE = re.compile(r"^\s*(\d+):(\d{2}):(\d{2})[,.](\d{3})\s*-->\s*(\d+):(\d{2}):(\d{2})[,.](\d{3})\s*$")
 META_RE = re.compile(r"^\w+=[^|]*(\|\w+=[^|]*)*$")
 # Prefixes seen: #NUM[..](..) #PER #ITEM #DATETIME, $[..](..), !en[..](..) !bio[..](..) !!bio[..](..), or none.
-ANNOTATION_RE = re.compile(r"(?:[#$!][#$!A-Za-z]*)?\[(?P<spoken>[^\]]*)\]\((?P<written>[^)]*)\)")
+ANNOTATION_RE = re.compile(r"(?:[#$!][#$!A-Za-z]*)?\[(?P<verbatim>[^\]]*)\]\((?P<normalized>[^)]*)\)")
 TAG_RE = re.compile(r"(?<![A-Za-z0-9])@[A-Za-z]+(?:-[A-Za-z]+)*")
-DEFAULT_HESITATIONS = ("umm", "uhh", "hmm", "ugh", "huh", "tsk", "uh-huh", "ehh")
+DEFAULT_HESITATIONS = ("umm", "uhh", "hmm", "ugh", "huh", "tsk", "uh-huh", "ehh", "ooh", "uh-oh")
 DIGIT_WORDS = "zero one two three four five six seven eight nine".split()
 ZERO_WIDTH_RE = re.compile("[​-‍⁠﻿]")  # ZWJ/ZWNJ etc. sit inside Indic words
 
@@ -125,7 +125,7 @@ class Token:
     text: str  # verbatim whitespace-separated token from the transcript
     words: list[str]  # normalised words to align; empty for tags / punctuation
     dropped: bool = False  # had letters but none the model can use (a script that could not be transliterated)
-    kind: str = ""  # word | hesitation | isolated | span | written | punctuation | untransliterated
+    kind: str = ""  # word | hesitation | isolated | span | normalized | punctuation | untransliterated
     script: str = ""  # script of the spoken letters, e.g. telugu / latin
 
 
@@ -331,7 +331,7 @@ def strip_marks(text: str) -> str:
 
 
 class Normaliser:
-    """Turns the spoken part of a transcript token into the letters the model knows.
+    """Turns the verbatim part of a transcript token into the letters the model knows.
 
     English: letters as written. Any other language: every Indic-script character is transliterated into
     Harvard-Kyoto and then spelled in the model's lowercase alphabet (translit="hk"); Latin words in code-mixed
@@ -373,8 +373,9 @@ class Normaliser:
         tag = match.group()[1:].lower()
         if tag not in self.hesitations:
             return " "
-        # "uhh" -> "uh": a doubled letter would need an extra blank frame between the two in CTC
-        sound = re.sub(r"(.)\1+", r"\1", tag).replace("-", " ")
+        # "uhh" -> "uh", "umm" -> "um", "hmm" -> "hm": a doubled consonant would need an extra blank frame between
+        # the two in CTC. Vowels are left alone, so "ooh" stays "ooh".
+        sound = re.sub(r"([^aeiou-])\1+", r"\1", tag).replace("-", " ")
         return f" {sound} "
 
     def _spell_number(self, match: re.Match) -> str:
@@ -405,16 +406,16 @@ class Normaliser:
 def tokenize(text: str, norm: Normaliser) -> list[Token]:
     """Split a transcript line into word units. Whitespace separates units, except that an annotation such as
     `!en[మల్టిపుల్ న్యూక్లియై](multiple nuclei)` stays one unit even though it contains spaces."""
-    # Mark which characters are spoken: inside an annotation only the [spoken] part is.
-    spoken, annotations = [True] * len(text), []
+    # Mark which characters were said: inside an annotation [verbatim](normalized) only the verbatim part is.
+    said, annotations = [True] * len(text), []
     for m in ANNOTATION_RE.finditer(text):
         annotations.append((m.start(), m.end()))
-        spoken[m.start():m.end()] = [False] * (m.end() - m.start())
-        spoken[m.start("spoken"):m.end("spoken")] = [True] * (m.end("spoken") - m.start("spoken"))
-    units, annotation_end = [], -1  # each unit: [start, end, [spoken text of each whitespace token in it]]
+        said[m.start():m.end()] = [False] * (m.end() - m.start())
+        said[m.start("verbatim"):m.end("verbatim")] = [True] * (m.end("verbatim") - m.start("verbatim"))
+    units, annotation_end = [], -1  # each unit: [start, end, [verbatim text of each whitespace token in it]]
     for m in re.finditer(r"\S+", text):
         start, end = m.span()
-        raw = "".join(c for i, c in enumerate(m.group(), start) if spoken[i])
+        raw = "".join(c for i, c in enumerate(m.group(), start) if said[i])
         if units and start < annotation_end:  # this token continues an annotation begun in an earlier token
             units[-1][1] = end
             units[-1][2].append(raw)
@@ -434,7 +435,7 @@ def tokenize(text: str, norm: Normaliser) -> list[Token]:
         elif dropped:
             kind = "untransliterated"
         elif not raw.strip():
-            kind = "written"
+            kind = "normalized"  # nothing but the (normalized) half of an annotation
         elif tags:
             kind = "span" if all(re.search(r"-(start|end)$", t) for t in tags) else "isolated"
         else:
