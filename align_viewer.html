@@ -1,0 +1,453 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Alignment Viewer</title>
+<style>
+:root {
+  --bg: #f7f7f5; --panel: #ffffff; --ink: #1c1c1a; --muted: #6b6b66; --line: #e1e1db;
+  --accent: #2f6fed; --accent-weak: #dbe6fd; --warn: #c2410c;
+  --hesitation: #d97706; --hesitation-weak: #fdf0d8; --isolated: #6b7280; --isolated-weak: #e5e7eb; --strip: #eeeee9; --b1: #cfe0ff; --b2: #b6cffa;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #161614; --panel: #1f1f1c; --ink: #ecece8; --muted: #9a9a93; --line: #33332f;
+    --accent: #7aa2ff; --accent-weak: #26345e; --warn: #fb923c;
+    --hesitation: #f59e0b; --hesitation-weak: #4a3412; --isolated: #9ca3af; --isolated-weak: #374151; --strip: #262623; --b1: #2a3a63; --b2: #34497e;
+  }
+}
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }
+html { scroll-padding-top: var(--head, 170px); }
+body { margin: 0; background: var(--bg); color: var(--ink); font: 14px/1.4 system-ui, -apple-system, "Segoe UI", sans-serif; }
+.mono { font-family: ui-monospace, "SF Mono", Menlo, monospace; }
+.muted { color: var(--muted); }
+.spacer { flex: 1; }
+
+header { position: sticky; top: 0; z-index: 5; background: var(--bg); border-bottom: 1px solid var(--line); padding: 10px 16px 8px; }
+.row { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin-bottom: 8px; }
+.row:last-child { margin-bottom: 0; }
+h1 { font-size: 15px; font-weight: 650; margin: 0 8px 0 0; }
+.btn, button { font: inherit; color: var(--ink); background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 4px 10px; cursor: pointer; }
+.btn:hover, button:hover { border-color: var(--accent); }
+button:disabled { opacity: .45; cursor: default; }
+input[type=search], select { font: inherit; color: var(--ink); background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 4px 8px; }
+input[type=search] { width: 220px; }
+label { display: inline-flex; align-items: center; gap: 5px; }
+
+#now { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 8px 12px; }
+#nowWord { font-size: 18px; font-weight: 650; min-width: 120px; }
+#nowTimes { font-size: 12.5px; }
+
+main { max-width: 1100px; margin: 0 auto; padding: 14px 16px 80px; }
+#empty { text-align: center; color: var(--muted); padding: 70px 0; }
+#empty b { color: var(--ink); }
+
+.card { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 12px 14px; margin-bottom: 12px; }
+.card-head { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; margin-bottom: 8px; }
+.card-head .id { font-weight: 650; }
+.card-head .meta { font-size: 12px; }
+.card-head button { padding: 1px 9px; font-size: 12.5px; }
+
+.strip { position: relative; height: 30px; background: var(--strip); border-radius: 6px; overflow: hidden; margin-bottom: 10px; }
+.blk { position: absolute; top: 3px; bottom: 3px; background: var(--b1); border-radius: 4px; font-size: 11px; line-height: 24px; padding: 0 3px; overflow: hidden; white-space: nowrap; cursor: pointer; }
+.blk.odd { background: var(--b2); }
+.blk.hesitation { background: var(--hesitation-weak); outline: 1px solid var(--hesitation); outline-offset: -1px; }
+.blk.isolated { background: var(--isolated-weak); outline: 1px dashed var(--isolated); outline-offset: -1px; }
+.blk.sel { outline: 2px solid var(--accent); outline-offset: -2px; }
+.blk.playing { background: var(--accent); color: #fff; }
+.tick { position: absolute; top: 0; bottom: 0; width: 5px; margin-left: -2px; cursor: pointer; }
+.tick::after { content: ""; position: absolute; left: 2px; top: 0; bottom: 0; width: 1px; background: var(--muted); opacity: .8; }
+.tick.sel::after { background: var(--accent); width: 2px; opacity: 1; }
+.bound { position: absolute; top: 0; bottom: 0; border-left: 1px dashed var(--muted); opacity: .55; pointer-events: none; }
+.playhead { position: absolute; top: 0; bottom: 0; width: 2px; background: var(--warn); display: none; pointer-events: none; }
+
+.words { display: flex; flex-wrap: wrap; gap: 6px; }
+.chip { display: inline-flex; flex-direction: column; align-items: flex-start; padding: 3px 8px; border: 1px solid var(--line); border-radius: 8px; cursor: pointer; background: var(--panel); user-select: none; }
+.chip:hover { border-color: var(--accent); }
+.chip .w { font-size: 14px; }
+.chip .t { font-size: 11px; color: var(--muted); }
+.chip.marker { opacity: .6; border-style: dashed; }
+.chip.hesitation { border-color: var(--hesitation); background: var(--hesitation-weak); }
+.chip.isolated { border-color: var(--isolated); border-style: dashed; }
+.chip.flag .t { color: var(--warn); font-weight: 700; }
+.chip.sel { outline: 2px solid var(--accent); outline-offset: 1px; }
+.chip.playing { background: var(--accent-weak); border-color: var(--accent); }
+.chip.match { box-shadow: 0 0 0 2px #facc15; }
+
+#drop { position: fixed; inset: 0; background: color-mix(in srgb, var(--accent) 18%, transparent); border: 3px dashed var(--accent); display: none; align-items: center; justify-content: center; font-size: 22px; z-index: 20; pointer-events: none; }
+body.dragging #drop { display: flex; }
+#msg { color: var(--warn); }
+</style>
+</head>
+<body>
+<header>
+  <div class="row">
+    <h1>Alignment viewer</h1>
+    <label class="btn">Audio… <input id="audioFile" type="file" accept="audio/*,video/*" hidden></label>
+    <span id="audioName" class="muted">none</span>
+    <label class="btn">Aligned RSML… <input id="rsmlFile" type="file" hidden></label>
+    <span id="rsmlName" class="muted">none</span>
+    <span class="spacer"></span>
+    <label>Speed
+      <select id="speed"><option value="0.5">0.5×</option><option value="0.75">0.75×</option><option value="1" selected>1×</option><option value="1.5">1.5×</option></select>
+    </label>
+    <label>Context
+      <select id="pad"><option value="0" selected>none (exact word)</option><option value="0.1">±0.1 s</option><option value="0.25">±0.25 s</option></select>
+    </label>
+  </div>
+  <div class="row">
+    <input id="search" type="search" placeholder="Find a word or tag…">
+    <label><input id="hideMarkers" type="checkbox"> hide tags / punctuation</label>
+    <label><input id="flaggedOnly" type="checkbox"> flagged only <span id="flagCount" class="muted"></span></label>
+    <label title="flag words whose confidence is below this (0-1); 0.3 matches flagged=1 in the file">flag confidence &lt; <input id="confTh" type="number" min="0" max="1" step="0.05" value="0.3" style="width:4.2em"></label>
+    <span id="stats" class="muted"></span>
+    <span id="msg"></span>
+  </div>
+  <div id="now" class="row">
+    <div id="nowWord">Select a word</div>
+    <div>
+      <div id="nowTimes" class="mono muted">click a word, or press ← / → · Space replays</div>
+      <div id="nowMeta" class="mono muted" style="font-size:12px"></div>
+      <div id="nowWhy" style="font-size:12.5px;color:var(--warn)"></div>
+    </div>
+    <span class="spacer"></span>
+    <button id="prev" title="Previous word (←)">◀</button>
+    <button id="replay" title="Play word (Space)">▶ Play word</button>
+    <button id="next" title="Next word (→)">▶</button>
+    <label><input id="loop" type="checkbox"> loop</label>
+  </div>
+</header>
+<main>
+  <div id="empty">Choose the <b>audio</b> file and the <b>aligned .rsml</b> (or drop both on this page).<br>Everything stays in your browser — nothing is uploaded.</div>
+  <div id="list"></div>
+</main>
+<div id="drop">Drop audio and .rsml files</div>
+
+<script>
+const $ = id => document.getElementById(id);
+const audio = new Audio();
+audio.preload = "auto";
+
+// Older files used short key names; they are read as the full names.
+const LEGACY_KEYS = { conf: "confidence", min: "weakest_letter_confidence", voiced: "voiced_fraction",
+                      pause: "pause_after_milliseconds", pause_voiced: "pause_voiced_fraction" };
+const TS = /^(\d+):(\d\d):(\d\d)[,.](\d{3})\s*-->\s*(\d+):(\d\d):(\d\d)[,.](\d{3})$/;
+const META = /^\w+=[^|]*(\|\w+=[^|]*)*$/;
+const sec = (h, m, s, ms) => +h * 3600 + +m * 60 + +s + +ms / 1000;
+const pad2 = n => String(n).padStart(2, "0");
+const fmt = t => {
+  const ms = Math.max(0, Math.round(t * 1000));
+  return `${pad2(Math.floor(ms / 3600000))}:${pad2(Math.floor(ms / 60000) % 60)}:${pad2(Math.floor(ms / 1000) % 60)},${String(ms % 1000).padStart(3, "0")}`;
+};
+const lexical = t => /\p{L}/u.test(t.replace(/@[\w-]+/g, ""));  // any script, not just Latin
+
+let segments = [];
+let sel = null;            // {seg, i}
+let curSeg = null, range = null, stopAt = null, timer = 0;
+let paintedSeg = null, paintedIdx = -1;
+let audioURL = null;
+
+// ---------------------------------------------------------------- parsing
+function parseRsml(text) {
+  const blocks = []; let cur = [];
+  for (const line of text.replace(/\r\n/g, "\n").split("\n")) {
+    if (line.trim()) cur.push(line);
+    else if (cur.length) { blocks.push(cur); cur = []; }
+  }
+  if (cur.length) blocks.push(cur);
+
+  const out = [];
+  for (const b of blocks) {
+    if (b.length < 3 || !/^\d+$/.test(b[0].trim())) continue;
+    const m = b[1].trim().match(TS);
+    if (!m) continue;
+    const plain = [], indented = [];
+    for (const l of b.slice(2)) (/^\s/.test(l) ? indented : plain).push(l);
+    let meta = "";
+    if (plain.length && META.test(plain[0])) meta = plain.shift();
+    // A word is: timestamp line, then (optionally) a key=value|key=value metadata line, then the word itself.
+    const groups = [];
+    for (const l of indented) {
+      const t = l.trim().match(TS);
+      if (t) groups.push({ t, rest: [] }); else if (groups.length) groups[groups.length - 1].rest.push(l.trim());
+    }
+    const words = [];
+    for (const g of groups) {
+      if (!g.rest.length) continue;
+      const t = g.t, text = g.rest[g.rest.length - 1];
+      const meta = {};
+      if (g.rest.length > 1) for (const kv of g.rest[0].split("|")) {
+        const k = kv.indexOf("="); if (k > 0) meta[LEGACY_KEYS[kv.slice(0, k)] || kv.slice(0, k)] = kv.slice(k + 1);
+      }
+      const s = sec(t[1], t[2], t[3], t[4]), e = sec(t[5], t[6], t[7], t[8]);
+      const dur = e - s;
+      // kind: word | hesitation | isolated | span | written | punctuation (older files without metadata: guess from the text)
+      const kind = meta.kind || (dur === 0 ? "span" : text.startsWith("@") ? "hesitation" : "word");
+      words.push({ s, e, t: text, dur, meta, kind, marker: dur === 0, flag: false, why: [] });
+    }
+    out.push({
+      id: b[0].trim(), meta, text: plain.join(" "), words,
+      start: sec(m[1], m[2], m[3], m[4]), end: sec(m[5], m[6], m[7], m[8]),
+    });
+  }
+  return out;
+}
+
+// ---------------------------------------------------------------- rendering
+function el(tag, cls, text) {
+  const n = document.createElement(tag);
+  if (cls) n.className = cls;
+  if (text != null) n.textContent = text;
+  return n;
+}
+
+function render() {
+  const list = $("list");
+  list.textContent = "";
+  let nWords = 0;
+  for (const seg of segments) {
+    const ws = seg.words;
+    seg.vs = Math.min(seg.start, ws.length ? ws[0].s : seg.start);
+    seg.ve = Math.max(seg.end, ws.length ? ws[ws.length - 1].e : seg.end);
+    const span = (seg.ve - seg.vs) || 1;
+    const pct = t => ((t - seg.vs) / span) * 100;
+
+    const card = el("section", "card");
+    seg.el = card;
+    const head = el("div", "card-head");
+    head.append(el("span", "id", `#${seg.id}`),
+      el("span", "mono muted", `${fmt(seg.start)} → ${fmt(seg.end)}  (${(seg.end - seg.start).toFixed(2)} s)`));
+    const play = el("button", null, "▶ segment");
+    play.onclick = () => playRange(seg.vs, seg.ve, seg);
+    head.append(play);
+    if (seg.meta) head.append(el("span", "meta muted mono", seg.meta));
+    card.append(head);
+
+    const strip = el("div", "strip");
+    for (const t of [seg.start, seg.end]) {
+      const b = el("div", "bound"); b.style.left = pct(t) + "%"; strip.append(b);
+    }
+    ws.forEach((w, i) => {
+      nWords++;
+      let n;
+      if (w.marker) { n = el("div", "tick"); n.style.left = pct(w.s) + "%"; }
+      else {
+        n = el("div", "blk" + (i % 2 ? " odd" : "") + (w.kind === "hesitation" || w.kind === "isolated" ? " " + w.kind : ""), w.t);
+        n.style.left = pct(w.s) + "%"; n.style.width = (pct(w.e) - pct(w.s)) + "%";
+      }
+      n.title = tip(w);
+      n.onclick = () => select(seg, i, true);
+      w.blk = n; strip.append(n);
+    });
+    seg.playhead = el("div", "playhead"); strip.append(seg.playhead);
+    card.append(strip);
+
+    const row = el("div", "words");
+    ws.forEach((w, i) => {
+      const c = el("div", "chip" + (w.marker ? " marker" : "") + (w.kind === "hesitation" || w.kind === "isolated" ? " " + w.kind : ""));
+      c.append(el("span", "w", w.t),
+        el("span", "t mono", w.marker ? `${w.s.toFixed(3)} ·` : `${w.s.toFixed(3)} · ${Math.round(w.dur * 1000)}ms`));
+      c.title = tip(w);
+      c.onclick = () => select(seg, i, true);
+      w.chip = c; row.append(c);
+    });
+    card.append(row);
+    list.append(card);
+  }
+  $("empty").hidden = segments.length > 0;
+  $("stats").textContent = segments.length ? `${segments.length} segments · ${nWords} word lines` : "";
+  if (segments.length && !nWords) setMsg("This file has no word-level lines — run forced_align.py on it first.");
+  else setMsg("");
+  updateFlags();
+}
+
+const metaLine = w => {
+  const m = w.meta, bits = [];
+  if (num(m.confidence) !== null) bits.push(`confidence ${m.confidence}`);
+  if (num(m.weakest_letter_confidence) !== null) bits.push(`weakest letter ${m.weakest_letter_confidence}`);
+  if (num(m.voiced_fraction) !== null) bits.push(`${Math.round(m.voiced_fraction * 100)}% voiced`);
+  if (num(m.pause_after_milliseconds) !== null) bits.push(`pause ${m.pause_after_milliseconds} ms (${Math.round((m.pause_voiced_fraction || 0) * 100)}% voiced)`);
+  if (m.kind) bits.push(m.kind + (m.script ? " · " + m.script : ""));
+  return bits.join("  ·  ");
+};
+const tip = w => `${w.t}\n${fmt(w.s)} → ${fmt(w.e)}\n${w.marker ? "zero-length (tag / punctuation)" : Math.round(w.dur * 1000) + " ms"}` +
+  (Object.keys(w.meta).length ? "\n" + metaLine(w) : "") + (w.why.length ? "\n⚠ " + w.why.join("; ") : "");
+const setMsg = m => { $("msg").textContent = m; };
+
+const num = v => (v === undefined || v === "" ? null : +v);
+
+// Why a word deserves a second look. Zero-length = tag / written form, never flagged as a squeezed word.
+function updateFlags() {
+  const th = +$("confTh").value;
+  let n = 0;
+  for (const seg of segments) for (const w of seg.words) {
+    const why = [], conf = num(w.meta.confidence), pv = num(w.meta.pause_voiced_fraction), pause = num(w.meta.pause_after_milliseconds);
+    if (w.kind === "word" && w.dur > 0 && lexical(w.t) && w.dur < 0.05) why.push("under 50 ms");
+    if (w.kind === "word" && w.dur > 1.5) why.push("over 1.5 s");
+    if (conf !== null && conf < th) why.push(`low confidence (${conf.toFixed(2)})`);
+    if (pv !== null && pause >= 150 && pv >= 0.3) why.push(`speech in the ${pause} ms pause after it (${Math.round(pv * 100)}% voiced)`);
+    w.why = why; w.flag = why.length > 0; n += w.flag;
+    w.chip.classList.toggle("flag", w.flag);
+  }
+  $("flagCount").textContent = segments.length ? `(${n} words)` : "";
+  applyFilters();
+}
+
+function applyFilters() {
+  const q = $("search").value.trim().toLowerCase();
+  const hideM = $("hideMarkers").checked, flagged = $("flaggedOnly").checked;
+  for (const seg of segments) {
+    const hit = !q || seg.words.some(w => w.t.toLowerCase().includes(q));
+    const fl = !flagged || seg.words.some(w => w.flag);
+    seg.el.hidden = !(hit && fl);
+    for (const w of seg.words) {
+      w.chip.classList.toggle("match", !!q && w.t.toLowerCase().includes(q));
+      w.chip.hidden = hideM && w.marker;
+    }
+  }
+}
+
+// ---------------------------------------------------------------- selection / playback
+function select(seg, i, play) {
+  if (sel) { const o = sel.seg.words[sel.i]; o.chip.classList.remove("sel"); o.blk.classList.remove("sel"); }
+  sel = { seg, i };
+  const w = seg.words[i];
+  w.chip.classList.add("sel"); w.blk.classList.add("sel");
+  $("nowWord").textContent = w.t;
+  $("nowTimes").textContent = `${fmt(w.s)} → ${fmt(w.e)}  ·  ${w.marker ? "zero-length" : Math.round(w.dur * 1000) + " ms"}  ·  segment #${seg.id}`;
+  $("nowMeta").textContent = metaLine(w);
+  $("nowWhy").textContent = w.why.length ? "⚠ " + w.why.join("; ") : "";
+  w.chip.scrollIntoView({ block: "nearest", behavior: "smooth" });
+  if (play) playWord();
+}
+
+function playWord() {
+  if (!sel) return;
+  const w = sel.seg.words[sel.i];
+  const p = +$("pad").value;
+  if (w.marker) playRange(w.s - 0.3, w.s + 0.3, sel.seg);
+  else playRange(w.s - p, w.e + p, sel.seg);
+}
+
+function playRange(a, b, seg) {
+  if (!audio.src) { setMsg("Load the audio file first."); return; }
+  setMsg("");
+  curSeg = seg; range = [Math.max(0, a), b]; stopAt = b;
+  audio.playbackRate = +$("speed").value;
+  audio.currentTime = range[0];
+  audio.play().catch(e => setMsg("Playback failed: " + e.message));
+}
+
+function paint(t) {
+  const clear = () => {
+    if (paintedSeg && paintedIdx >= 0) {
+      const w = paintedSeg.words[paintedIdx];
+      w.chip.classList.remove("playing"); w.blk.classList.remove("playing");
+    }
+    paintedSeg = null; paintedIdx = -1;
+  };
+  if (t == null || !curSeg) {
+    clear();
+    for (const s of segments) s.playhead.style.display = "none";
+    return;
+  }
+  let idx = -1;
+  const ws = curSeg.words;
+  for (let i = 0; i < ws.length; i++) if (ws[i].dur > 0 && t >= ws[i].s && t < ws[i].e) { idx = i; break; }
+  if (curSeg !== paintedSeg || idx !== paintedIdx) {
+    clear();
+    if (idx >= 0) { ws[idx].chip.classList.add("playing"); ws[idx].blk.classList.add("playing"); paintedSeg = curSeg; paintedIdx = idx; }
+  }
+  const span = (curSeg.ve - curSeg.vs) || 1;
+  curSeg.playhead.style.display = t >= curSeg.vs && t <= curSeg.ve ? "block" : "none";
+  curSeg.playhead.style.left = ((t - curSeg.vs) / span) * 100 + "%";
+}
+
+function loop() {
+  const t = audio.currentTime;
+  if (stopAt != null && t >= stopAt) {
+    if ($("loop").checked && range) audio.currentTime = range[0];
+    else { audio.pause(); stopAt = null; }
+  }
+  paint(audio.currentTime);
+}
+// A timer rather than requestAnimationFrame: rAF stops firing in occluded/background windows, which
+// would let a word keep playing past its end.
+const stopLoop = () => { clearInterval(timer); timer = 0; paint(null); };
+audio.addEventListener("play", () => { clearInterval(timer); timer = setInterval(loop, 10); });
+audio.addEventListener("pause", stopLoop);
+audio.addEventListener("ended", stopLoop);
+audio.addEventListener("error", () => setMsg("The browser could not decode this audio file."));
+audio.addEventListener("loadedmetadata", () => {
+  const d = audio.duration, m = Math.floor(d / 60);
+  $("audioName").textContent = $("audioName").dataset.name + `  ·  ${m}:${pad2(Math.round(d % 60))}`;
+});
+
+function step(dir) {
+  const vis = [];
+  for (const seg of segments) if (!seg.el.hidden)
+    seg.words.forEach((w, i) => { if (!w.chip.hidden) vis.push([seg, i]); });
+  if (!vis.length) return;
+  let k = sel ? vis.findIndex(([s, i]) => s === sel.seg && i === sel.i) : -1;
+  k = k < 0 ? (dir > 0 ? 0 : vis.length - 1) : Math.min(vis.length - 1, Math.max(0, k + dir));
+  select(vis[k][0], vis[k][1], true);
+}
+
+// ---------------------------------------------------------------- loading files
+function loadAudio(fileOrUrl, name) {
+  if (audioURL) URL.revokeObjectURL(audioURL);
+  audioURL = typeof fileOrUrl === "string" ? null : URL.createObjectURL(fileOrUrl);
+  audio.src = audioURL || fileOrUrl;
+  $("audioName").dataset.name = name;
+  $("audioName").textContent = name;
+}
+function loadRsml(text, name) {
+  segments = parseRsml(text); sel = null; curSeg = null;
+  $("nowWord").textContent = "Select a word"; $("nowMeta").textContent = ""; $("nowWhy").textContent = "";
+  $("nowTimes").textContent = "click a word, or press ← / → · Space replays";
+  $("rsmlName").textContent = name;
+  render();
+}
+async function loadFiles(files) {
+  for (const f of files) {
+    if (/\.(rsml|srt|txt)$/i.test(f.name)) loadRsml(await f.text(), f.name);
+    else loadAudio(f, f.name);
+  }
+}
+
+$("audioFile").onchange = e => loadFiles(e.target.files);
+$("rsmlFile").onchange = e => loadFiles(e.target.files);
+$("search").oninput = applyFilters;
+$("hideMarkers").onchange = applyFilters;
+$("flaggedOnly").onchange = applyFilters;
+$("confTh").oninput = updateFlags;
+$("speed").onchange = () => { audio.playbackRate = +$("speed").value; };
+$("replay").onclick = playWord;
+$("prev").onclick = () => step(-1);
+$("next").onclick = () => step(1);
+
+document.addEventListener("mousedown", e => { if (e.target.closest("button")) e.preventDefault(); });
+document.addEventListener("keydown", e => {
+  if (e.target.matches("input[type=search]")) return;
+  if (e.key === " ") { e.preventDefault(); if (!audio.paused) audio.pause(); else playWord(); }
+  else if (e.key === "ArrowRight") { e.preventDefault(); step(1); }
+  else if (e.key === "ArrowLeft") { e.preventDefault(); step(-1); }
+});
+let dragDepth = 0;
+addEventListener("dragenter", e => { e.preventDefault(); dragDepth++; document.body.classList.add("dragging"); });
+addEventListener("dragleave", () => { if (--dragDepth <= 0) { dragDepth = 0; document.body.classList.remove("dragging"); } });
+addEventListener("dragover", e => e.preventDefault());
+addEventListener("drop", e => { e.preventDefault(); dragDepth = 0; document.body.classList.remove("dragging"); loadFiles(e.dataTransfer.files); });
+
+const setHeadVar = () => document.documentElement.style.setProperty("--head", document.querySelector("header").offsetHeight + 12 + "px");
+addEventListener("resize", setHeadVar); setHeadVar();
+
+// Optional: ?audio=<url>&rsml=<url> when the page is served over http (handy for testing)
+const params = new URLSearchParams(location.search);
+if (params.get("audio")) loadAudio(params.get("audio"), params.get("audio"));
+if (params.get("rsml")) fetch(params.get("rsml")).then(r => r.text()).then(t => loadRsml(t, params.get("rsml"))).catch(e => setMsg("Could not load rsml: " + e.message));
+</script>
+</body>
+</html>
