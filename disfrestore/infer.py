@@ -161,6 +161,21 @@ def normalise_text(text: str) -> list[str]:
     return [w for w in t.split() if w.strip("'-")]
 
 
+def restored_phones(words: list[str], ref: list[list[str]], items: list[dict]) -> str:
+    """Stage 1 of the restoration: the ASR transcript at phone level with the *restored sounds* spliced into the gaps,
+    e.g. ``so[s ow] {FP: ah m} today[t ah d ey]``.  Stage 2 (phones -> words) is ``items[*].text``."""
+    by_gap: dict[int, list[dict]] = {}
+    for it in items:
+        by_gap.setdefault(it["gap"], []).append(it)
+    out = []
+    for g in range(len(words) + 1):
+        for it in by_gap.get(g, []):
+            out.append("{%s: %s}" % (it["tag"], " ".join(it["phones"])))
+        if g < len(words):
+            out.append("%s[%s]" % (words[g], " ".join(ref[g])))
+    return " ".join(out)
+
+
 class Restoration:
     """Tagger + restorer bundle that turns (ASR words, recognised phones) into typed, restored output."""
 
@@ -209,7 +224,7 @@ class Restoration:
             items.append(it)
         ws = [(a, b, t) for a, b, t in word_spans(e, lab)]
         return {"words": words, "items": items, "word_spans": ws, "align_cost": al.cost,
-                "n_gap_phones": sum(len(g) for g in al.gaps)}
+                "n_gap_phones": sum(len(g) for g in al.gaps), "restored_phones": restored_phones(words, ref, items)}
 
 
 def run(args) -> dict:
@@ -240,7 +255,7 @@ def run(args) -> dict:
             counts["word:" + t] = counts.get("word:" + t, 0) + 1
         out_windows.append({
             "start": round(a, 2), "end": round(b, 2), "asr": text.strip(), "recognised_phones": " ".join(p.ph for p in rec),
-            "items": r["items"], "word_spans": r["word_spans"],
+            "items": r["items"], "word_spans": r["word_spans"], "restored_phones": r["restored_phones"],
             "restored": render(words, r["items"]),
             "tagged": render(words, r["items"], r["word_spans"], tagged=True),
         })
@@ -253,6 +268,7 @@ def run(args) -> dict:
     out.with_suffix(".json").write_text(json.dumps({"summary": summary, "windows": out_windows}, indent=1))
     with open(out.with_suffix(".txt"), "w") as f:
         for w in out_windows:
-            f.write(f"[{w['start']:.1f}-{w['end']:.1f}]\nASR     : {w['asr']}\nRESTORED: {w['restored']}\nTAGGED  : {w['tagged']}\n\n")
+            f.write(f"[{w['start']:.1f}-{w['end']:.1f}]\nASR     : {w['asr']}\nPHONES  : {w['restored_phones']}\n"
+                    f"RESTORED: {w['restored']}\nTAGGED  : {w['tagged']}\n\n")
     print(json.dumps(summary, indent=1))
     return summary

@@ -31,6 +31,8 @@ def fetch(args) -> list[Path]:
     out.mkdir(parents=True, exist_ok=True)
     written = []
     for lecture, utts in sorted(by_lecture.items(), key=lambda kv: -len(kv[1])):
+        if getattr(args, "lecture", None) and args.lecture not in lecture:
+            continue
         utts.sort(key=lambda u: u["n"])
         # longest run of consecutive utterance numbers
         run, best = [utts[0]], []

@@ -71,6 +71,7 @@ def main(argv: list[str] | None = None) -> None:
     n.add_argument("--out", default="data/nptel_audio")
     n.add_argument("--utterances", type=int, default=40, help="consecutive utterances per clip (about 7 s each)")
     n.add_argument("--clips", type=int, default=2)
+    n.add_argument("--lecture", default=None, help="only lectures whose id contains this text, e.g. 108105103")
     args = ap.parse_args(argv)
 
     if args.cmd == "download":
