@@ -1,0 +1,7 @@
+486.4s of audio -> 54 windows
+Warning: You are sending unauthenticated requests to the HF Hub. Please set a HF_TOKEN to enable higher rate limits and faster downloads.
+Loading weights:   0%|          | 0/424 [00:00<?, ?it/s]Loading weights: 100%|██████████| 424/424 [00:00<00:00, 6749.32it/s]
+Loading weights:   0%|          | 0/479 [00:00<?, ?it/s]Loading weights:  41%|████      | 196/479 [00:00<00:00, 1959.60it/s]Loading weights: 100%|██████████| 479/479 [00:00<00:00, 2693.63it/s]
+models loaded in 7s
+[transformers] Using custom `forced_decoder_ids` from the (generation) config. This is deprecated in favor of the `task` and `language` flags/config options.
+[transformers] Passing `generation_config` together with generation-related arguments=({'begin_suppress_tokens', 'suppress_tokens'}) is deprecated and will be removed in future versions. Please pass either a `generation_config` object OR all generation parameters explicitly, but not both.

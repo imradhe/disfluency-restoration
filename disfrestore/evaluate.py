@@ -24,6 +24,17 @@ from .labeler import TAGS
 from .restore import Restorer, render, spans_from_predictions, word_spans
 
 
+# which predicted types are actually inserted into the transcript (choose on dev; unreliable types hurt WER when wrong)
+POLICIES = {
+    "all types": {"FP", "EX", "BC", "PW", "REP", "RPR", "FS", "EET", "DM"},
+    "no RPR/FS": {"FP", "EX", "BC", "PW", "REP", "EET", "DM"},
+    "no RPR/FS/PW": {"FP", "EX", "BC", "REP", "EET", "DM"},
+    "FP+EX+BC+REP": {"FP", "EX", "BC", "REP"},
+    "FP+EX+BC": {"FP", "EX", "BC"},
+    "FP only": {"FP"},
+}
+
+
 def wer_counts(ref: list[str], hyp: list[str]) -> tuple[int, int]:
     """(edit errors, ref length)."""
     n, m = len(ref), len(hyp)
@@ -86,6 +97,7 @@ def evaluate(examples: list[dict], enc: Encoder, restorer: Restorer, model=None,
 
     tp, fp, fn, exact = (collections.Counter() for _ in range(4))
     errs_base = errs_rest = errs_rest_notag = n_ref = 0
+    pol_err = collections.Counter()
     shown = []
     for ex, e, pr in zip(examples, encoded, preds):
         spans = spans_from_predictions(e, pr, ex["gp"])
@@ -108,6 +120,8 @@ def evaluate(examples: list[dict], enc: Encoder, restorer: Restorer, model=None,
         restored = render(ex["words"], pred_items).split()
         a, n = wer_counts(ex["ref"], ex["words"])
         b, _ = wer_counts(ex["ref"], restored)
+        for name, tagset in POLICIES.items():
+            pol_err[name] += wer_counts(ex["ref"], render(ex["words"], [it for it in pred_items if it["tag"] in tagset]).split())[0]
         errs_base += a
         errs_rest += b
         n_ref += n
@@ -131,6 +145,7 @@ def evaluate(examples: list[dict], enc: Encoder, restorer: Restorer, model=None,
                      "exact_given_located": X / max(T, 1), "gold": T + N, "pred": T + F}
     return {"tagging": tagging, "items": rows,
             "wer": {"asr_baseline": errs_base / n_ref, "restored": errs_rest / n_ref, "ref_words": n_ref},
+            "wer_policies": {k: v / n_ref for k, v in pol_err.items()},
             "examples": shown, "oracle": oracle, "n": len(examples)}
 
 
@@ -148,6 +163,9 @@ def format_report(rep: dict) -> str:
     w = rep["wer"]
     lines += ["", f"verbatim WER vs reference ({w['ref_words']} words): plain ASR {100 * w['asr_baseline']:.2f}%  ->  "
                   f"restored {100 * w['restored']:.2f}%"]
+    if "wer_policies" in rep:
+        lines += ["", "WER by restoration policy (which predicted types are inserted):"]
+        lines += [f"  {k:<16}{100 * v:6.2f}%" for k, v in rep["wer_policies"].items()]
     return "\n".join(lines)
 
 
