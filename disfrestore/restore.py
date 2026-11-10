@@ -194,7 +194,8 @@ def render(words: list[str], items: list[dict], wspans: list[tuple[int, int, str
     """ASR words with restored items inserted into their gaps.  ``tagged`` marks restored items as {TAG:text} and
     disfluent words already in the ASR text as [TAG:words].  In the plain transcript, items whose phones could not be turned
     into words (``how == "phones"``, shown as ``[d]``) are left out: a bracketed phone string is never the right word; they
-    stay visible in the tagged view and in the JSON output."""
+    stay visible in the tagged view and in the JSON output.  The exception is an unresolved partial word (``[k ah]-``), which
+    is kept as a fragment marker."""
     by_gap: dict[int, list[dict]] = {}
     for it in items:
         by_gap.setdefault(it["gap"], []).append(it)

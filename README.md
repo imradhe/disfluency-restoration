@@ -193,5 +193,5 @@ Precision is a lower bound: a human may not have marked every filler.
 
 `disfrestore/` — `swb.py` corpus reader · `labeler.py` tags · `simulate.py` ASR/recogniser simulation · `lexicon.py` G2P · `align.py` ·
 `features.py` · `encoding.py` · `model.py` · `train.py` (+ calibration) · `restore.py` · `evaluate.py` · `infer.py` · `nptel.py` · `download.py` ·
-`data.py` · `cli.py`. `tests/` — 30 unit/integration tests. `results/` — evaluation reports, training log, calibration, NPTEL summary.
+`data.py` · `cli.py`. `docs/METHODOLOGY.md` — the exact methodology and architecture. `tests/` — 30 unit/integration tests. `results/` — evaluation reports, training log, calibration, NPTEL summary.
 Existing scripts of the repo (`forced_align.py`, `switchboard_to_rsml.py`, notebooks) are untouched.
