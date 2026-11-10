@@ -1,0 +1,15 @@
+# corpora, audio, models and run outputs stay out of git
+data/
+runs/
+outputs/
+*.parquet
+*.wav
+*.mp3
+*.mp4
+*.flac
+*.pt
+*.safetensors
+__pycache__/
+.pytest_cache/
+*.egg-info/
+.venv*/
