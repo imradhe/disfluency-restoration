@@ -42,23 +42,75 @@ def class_weights(encoded, power: float = 0.5, cap: float = 20.0) -> torch.Tenso
 
 
 @torch.no_grad()
-def predict(model, encoded, batch_size: int = 128, pad_id: int = 0):
-    """-> list of predicted label-id lists (one per example, aligned with Encoded.ids) and the logits' max prob."""
+def logits_for(model, encoded, batch_size: int = 128, pad_id: int = 0):
+    """Per-example logits (n_tokens x n_labels), in the order of ``encoded``."""
     model.eval()
     order = sorted(range(len(encoded)), key=lambda i: len(encoded[i].ids))
-    preds = [None] * len(encoded)
-    probs = [None] * len(encoded)
+    out = [None] * len(encoded)
     for s in range(0, len(order), batch_size):
         ids = order[s:s + batch_size]
         batch = collate([encoded[i] for i in ids], pad_id)
         logits = model(batch["ids"], batch["attn"], batch["kind"], batch["feats"])
-        p = torch.softmax(logits, -1)
-        pr, lab = p.max(-1)
         for r, i in enumerate(ids):
-            n = len(encoded[i].ids)
-            preds[i] = lab[r, :n].tolist()
-            probs[i] = p[r, :n].numpy()
+            out[i] = logits[r, :len(encoded[i].ids)].numpy()
+    return out
+
+
+def class_bias(weights: torch.Tensor, alpha: float) -> torch.Tensor:
+    """Undo (alpha=1) or soften the over-prediction that class-weighted cross-entropy builds in: logits - alpha*log(w)."""
+    return -alpha * torch.log(weights)
+
+
+def decode_logits(logits, bias=None):
+    """-> (label ids per example, probabilities per example)"""
+    preds, probs = [], []
+    b = None if bias is None else np.asarray(bias, dtype=np.float32)
+    for lg in logits:
+        z = lg if b is None else lg + b
+        z = z - z.max(-1, keepdims=True)
+        p = np.exp(z)
+        p /= p.sum(-1, keepdims=True)
+        preds.append(p.argmax(-1).tolist())
+        probs.append(p)
     return preds, probs
+
+
+def predict(model, encoded, batch_size: int = 128, pad_id: int = 0, bias=None):
+    """-> list of predicted label-id lists (one per example, aligned with Encoded.ids) and the probabilities."""
+    return decode_logits(logits_for(model, encoded, batch_size, pad_id), bias)
+
+
+def load_bias(model_dir) -> list[float] | None:
+    f = Path(model_dir) / "calibration.json"
+    return json.loads(f.read_text())["bias"] if f.exists() else None
+
+
+def calibrate(args) -> dict:
+    """Pick alpha on dev: tagger logits - alpha*log(class weights).  Writes <model>/calibration.json."""
+    torch.set_num_threads(args.threads)
+    model, tok, _ = Tagger.load(args.model)
+    enc = Encoder(tok)
+    tr = [enc.encode(e) for e in read_jsonl(Path(args.data) / "train.jsonl", args.max_train)]
+    dv = [enc.encode(e) for e in read_jsonl(Path(args.data) / "dev.jsonl", args.max_dev)]
+    cw = class_weights(tr, 0.5)
+    lg = logits_for(model, dv, pad_id=tok.pad_token_id)
+    best, rows = None, []
+    for alpha in (0.0, 0.25, 0.5, 0.75, 1.0, 1.25):
+        bias = class_bias(cw, alpha).tolist()
+        preds, _ = decode_logits(lg, bias)
+        sc = span_scores(dv, preds)
+        gap, word = sc["gap"]["micro"], sc["word"]["micro"]
+        score = 0.5 * gap["f1"] + 0.5 * word["f1"]
+        rows.append({"alpha": alpha, "gap_P": gap["p"], "gap_R": gap["r"], "gap_f1": gap["f1"], "word_f1": word["f1"],
+                     "score": score})
+        print(f"alpha {alpha:4.2f}  gap P {gap['p']:.3f} R {gap['r']:.3f} F1 {gap['f1']:.3f}   word F1 {word['f1']:.3f}   "
+              f"mean {score:.3f}", flush=True)
+        if best is None or score > best[0]:
+            best = (score, alpha, bias)
+    out = {"alpha": best[1], "bias": best[2], "dev_score": best[0], "grid": rows}
+    (Path(args.model) / "calibration.json").write_text(json.dumps(out, indent=1))
+    print(f"chosen alpha {best[1]} (dev mean span-F1 {best[0]:.3f}) -> {args.model}/calibration.json")
+    return out
 
 
 def span_scores(encoded, preds, group_tags=None) -> dict:

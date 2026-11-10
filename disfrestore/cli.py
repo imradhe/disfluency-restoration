@@ -40,12 +40,20 @@ def main(argv: list[str] | None = None) -> None:
     t.add_argument("--threads", type=int, default=4)
     t.add_argument("--seed", type=int, default=0)
 
+    c = sub.add_parser("calibrate", help="choose the prior-correction strength on dev; writes <model>/calibration.json")
+    c.add_argument("--model", default="runs/electra_small")
+    c.add_argument("--data", default="data/processed")
+    c.add_argument("--max-train", type=int, default=30000, help="examples used only to count labels for the class weights")
+    c.add_argument("--max-dev", type=int, default=3000)
+    c.add_argument("--threads", type=int, default=2)
+
     e = sub.add_parser("evaluate", help="tagging, restoration and WER on a simulated split")
     e.add_argument("--data", default="data/processed")
     e.add_argument("--root", default="data/MSU Switchboard/swb_ms98_transcriptions")
     e.add_argument("--model", default="runs/electra_small")
     e.add_argument("--split", default="test")
     e.add_argument("--max-examples", type=int, default=None)
+    e.add_argument("--no-calibration", action="store_true", help="ignore <model>/calibration.json")
     e.add_argument("--oracle", action="store_true", help="use gold tags instead of the model (phones->words ceiling)")
     e.add_argument("--encoder", default="google/electra-small-discriminator", help="tokenizer source for --oracle")
     e.add_argument("--show", type=int, default=6)
@@ -91,6 +99,10 @@ def main(argv: list[str] | None = None) -> None:
         from .nptel import fetch
 
         fetch(args)
+    if args.cmd == "calibrate":
+        from .train import calibrate
+
+        calibrate(args)
     if args.cmd == "evaluate":
         from .evaluate import run
 

@@ -74,14 +74,14 @@ def gold_label_ids(ex: dict, e) -> list[int]:
 
 
 def evaluate(examples: list[dict], enc: Encoder, restorer: Restorer, model=None, pad_id: int = 0,
-             oracle: bool = False, show: int = 8) -> dict:
+             oracle: bool = False, show: int = 8, bias=None) -> dict:
     from .train import predict, span_scores
 
     encoded = [enc.encode(e) for e in examples]
     if oracle:
         preds = [gold_label_ids(e, x) for e, x in zip(examples, encoded)]
     else:
-        preds, _ = predict(model, encoded, pad_id=pad_id)
+        preds, _ = predict(model, encoded, pad_id=pad_id, bias=bias)
     tagging = span_scores(encoded, preds)
 
     tp, fp, fn, exact = (collections.Counter() for _ in range(4))
@@ -137,7 +137,8 @@ def evaluate(examples: list[dict], enc: Encoder, restorer: Restorer, model=None,
 def format_report(rep: dict) -> str:
     from .train import format_scores
 
-    lines = [f"examples: {rep['n']}   tagger: {'ORACLE (gold labels)' if rep['oracle'] else 'model'}", "",
+    lines = [f"examples: {rep['n']}   tagger: {'ORACLE (gold labels)' if rep['oracle'] else 'model'}"
+             f"{' + prior calibration' if rep.get('calibrated') else ''}", "",
              format_scores(rep["tagging"]), "", "restoration of dropped items (NS events excluded)",
              f"  {'tag':<6}{'locP':>7}{'locR':>7}{'locF1':>7}{'text|loc':>11}{'gold':>7}{'pred':>7}"]
     for t, r in rep["items"].items():
@@ -171,7 +172,11 @@ def run(args) -> dict:
     else:
         torch.set_num_threads(args.threads)
         model, tok, _ = Tagger.load(args.model)
-    rep = evaluate(examples, Encoder(tok), restorer, model, tok.pad_token_id, oracle=args.oracle)
+    from .train import load_bias
+
+    bias = None if args.oracle or args.no_calibration else load_bias(args.model)
+    rep = evaluate(examples, Encoder(tok), restorer, model, tok.pad_token_id, oracle=args.oracle, bias=bias)
+    rep["calibrated"] = bias is not None
     print(format_report(rep))
     for s in rep["examples"][:args.show]:
         print("\nREF     :", s["ref"], "\nASR     :", s["asr"], "\nRESTORED:", s["restored"],

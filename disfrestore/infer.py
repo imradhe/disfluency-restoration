@@ -189,7 +189,11 @@ class Restoration:
 
         torch.set_num_threads(threads)
         self.torch = torch
+        from .train import load_bias
+
         self.model, self.tok, _ = Tagger.load(model_dir)
+        b = load_bias(model_dir)
+        self.bias = None if b is None else torch.tensor(b)
         self.enc = Encoder(self.tok, max_len=500)
         self.g2p = G2P()
         self.g2p.load_cache(Path(data_dir) / "g2p_cache.json")
@@ -208,6 +212,8 @@ class Restoration:
         batch = collate([e], self.tok.pad_token_id)
         with self.torch.no_grad():
             logits = self.model(batch["ids"], batch["attn"], batch["kind"], batch["feats"])[0]
+            if self.bias is not None:
+                logits = logits + self.bias
         prob = self.torch.softmax(logits, -1)
         conf, lab = prob.max(-1)
         lab, conf = lab.tolist(), conf.tolist()
