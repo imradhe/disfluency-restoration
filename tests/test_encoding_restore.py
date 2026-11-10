@@ -58,3 +58,10 @@ def test_render(restorer):
     items = [{"gap": 3, "tag": "FP", "text": "um"}, {"gap": 3, "tag": "REP", "text": "the"}, {"gap": 5, "tag": "NS", "text": "[noise]"}]
     assert render(words, items) == "we went to um the the store"
     assert render(words, items, [(1, 1, "FS")], tagged=True) == "we [FS:went] to {FP:um} {REP:the} the store"
+
+
+def test_render_leaves_unresolved_items_out_of_the_plain_transcript():
+    words = "we went to the store".split()
+    items = [{"gap": 3, "tag": "REP", "text": "[d]", "how": "phones"}, {"gap": 3, "tag": "FP", "text": "um", "how": "inventory"}]
+    assert render(words, items) == "we went to um the store"
+    assert render(words, items, tagged=True) == "we went to {REP:[d]} {FP:um} the store"

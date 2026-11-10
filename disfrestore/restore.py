@@ -192,7 +192,9 @@ def word_spans(enc, label_ids: list[int]):
 def render(words: list[str], items: list[dict], wspans: list[tuple[int, int, str]] | None = None,
            tagged: bool = False, with_events: bool = False) -> str:
     """ASR words with restored items inserted into their gaps.  ``tagged`` marks restored items as {TAG:text} and
-    disfluent words already in the ASR text as [TAG:words]."""
+    disfluent words already in the ASR text as [TAG:words].  In the plain transcript, items whose phones could not be turned
+    into words (``how == "phones"``, shown as ``[d]``) are left out: a bracketed phone string is never the right word; they
+    stay visible in the tagged view and in the JSON output."""
     by_gap: dict[int, list[dict]] = {}
     for it in items:
         by_gap.setdefault(it["gap"], []).append(it)
@@ -202,6 +204,8 @@ def render(words: list[str], items: list[dict], wspans: list[tuple[int, int, str
     for g in range(len(words) + 1):
         for it in by_gap.get(g, []):
             if it["tag"] == "NS" and not with_events:
+                continue
+            if not tagged and it.get("how") == "phones" and it["tag"] != "PW":
                 continue
             out.append("{%s:%s}" % (it["tag"], it["text"]) if tagged else it["text"])
         if g < len(words):
