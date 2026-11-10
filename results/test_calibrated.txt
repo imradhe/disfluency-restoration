@@ -1,0 +1,97 @@
+examples: 7420   tagger: model + prior calibration
+
+[gap spans]   tag         P      R     F1    gold    pred
+               FP      0.815  0.884  0.848    2614    2837
+               EX      0.535  0.535  0.535      43      43
+               BC      0.782  0.761  0.771     184     179
+               PW      0.300  0.163  0.212     796     433
+               NS      0.761  0.787  0.774    1280    1324
+               REP     0.466  0.497  0.481    2444    2604
+               RPR     0.306  0.408  0.350     661     882
+               FS      0.249  0.273  0.260     161     177
+               EET     0.409  0.474  0.439      19      22
+               DM      0.505  0.676  0.578      71      95
+               micro   0.605  0.628  0.616    8273    8596
+[word spans]   tag         P      R     F1    gold    pred
+               FP      0.998  1.000  0.999    1225    1227
+               EX      0.905  1.000  0.950      19      21
+               BC      0.991  1.000  0.996     775     782
+               PW      0.987  1.000  0.993     376     381
+               MP      0.000  0.000  0.000      19       0
+               REP     0.773  0.880  0.823    1610    1832
+               RPR     0.330  0.234  0.274     304     215
+               FS      0.095  0.053  0.068      75      42
+               EET     0.472  0.763  0.584     190     307
+               DM      0.816  0.660  0.730    2092    1693
+               micro   0.833  0.810  0.821    6685    6500
+
+restoration of dropped items (NS events excluded)
+  tag      locP   locR  locF1   text|loc   gold   pred
+  FP      0.814  0.663  0.731      0.938   3480   2837
+  EX      0.581  0.543  0.562      1.000     46     43
+  BC      0.804  0.778  0.791      0.861    185    179
+  PW      0.427  0.185  0.259      0.368    998    433
+  REP     0.452  0.505  0.477      0.630   2330   2604
+  RPR     0.285  0.467  0.354      0.219    538    882
+  FS      0.401  0.467  0.432      0.183    152    177
+  EET     0.455  0.455  0.455      0.600     22     22
+  DM      0.611  0.725  0.663      0.690     80     95
+  micro   0.581  0.540  0.560      0.766   7831   7272
+
+verbatim WER vs reference (138549 words): plain ASR 11.64%  ->  restored 9.20%
+
+WER by restoration policy (which predicted types are inserted):
+  all types         9.20%
+  no RPR/FS         9.43%
+  no RPR/FS/PW      9.36%
+  FP+EX+BC+REP      9.41%
+  FP+EX+BC         10.10%
+  FP only          10.19%
+
+REF     : um-hum well uh were you over in vietnam or 
+ASR     : well were you over in vietnam all 
+RESTORED: {BC:um-hum} well were you over in vietnam all 
+  gold: [(0, 'BC', 'um-hum'), (1, 'FP', 'uh')] 
+  pred: [(0, 'BC', 'um-hum', 'inventory')]
+
+REF     : um in a way both my well uh both my brothers were um draft age but neither of them wound up going over which i think they were very happy for uh 
+ASR     : in a way my well both my brothers were draft age but neither of them wound up going over which i think they were very happy for 
+RESTORED: {FP:um} in a way {REP:[ow]} my well both my brothers were {FP:um} draft age but neither of them wound up going over which i think they were very happy for {FP:uh} 
+  gold: [(0, 'FP', 'um'), (3, 'RPR', 'both'), (5, 'FP', 'uh'), (9, 'FP', 'um'), (27, 'FP', 'uh')] 
+  pred: [(0, 'FP', 'um', 'inventory'), (3, 'REP', '[ow]', 'phones'), (9, 'FP', 'um', 'inventory'), (27, 'FP', 'uh', 'inventory')]
+
+REF     : well um so well do you do you feel that it was worth what we did over there or 
+ASR     : well so well do you feel that it was worth what we did over there or 
+RESTORED: well {FP:um} so well {REP:do you} do you feel that it was worth what we did over there or 
+  gold: [(1, 'FP', 'um'), (3, 'REP', 'do you')] 
+  pred: [(1, 'FP', 'um', 'inventory'), (3, 'REP', 'do you', 'copy-next')]
+
+REF     : um do you think i mean do you think our invest- the investment in lives and money was worth it 
+ASR     : i mean do you think our the investment in lives and money was worth it 
+RESTORED: {FP:um} {RPR:[uw y l f]} {REP:[ih]} {RPR:[ng]} {PW:[k]-} [EET:i] [EET:mean] do you think our the investment in lives and money was worth it 
+  gold: [(0, 'FP', 'um'), (0, 'REP', 'do you think'), (6, 'PW', 'invest-')] 
+  pred: [(0, 'FP', 'um', 'inventory'), (0, 'RPR', '[uw y l f]', 'phones'), (0, 'REP', '[ih]', 'phones'), (0, 'RPR', '[ng]', 'phones'), (0, 'PW', '[k]-', 'phones')]
+
+REF     : um-hum um so um do you do you do you think that like our um for example like in in th- this past war the persian gulf war 
+ASR     : so do you do do you think that like out for example like in in this past war the persian gulf war 
+RESTORED: {BC:um-hum} {FP:um} so {FP:um} [REP:do you do] {REP:you} do you think that like out for example like [REP:in] in {REP:[dh]} this past war the persian gulf war 
+  gold: [(0, 'BC', 'um-hum'), (0, 'FP', 'um'), (1, 'FP', 'um'), (4, 'REP', 'you'), (10, 'FP', 'um'), (15, 'PW', 'th-')] 
+  pred: [(0, 'BC', 'um-hum', 'inventory'), (0, 'FP', 'um', 'inventory'), (1, 'FP', 'um', 'inventory'), (4, 'REP', 'you', 'lexicon'), (15, 'REP', '[dh]', 'phones')]
+
+REF     : that uh that you see it seemed to me that that bush was going going to extraordinary lengths to um you know prepare the country for war yeah okay 
+ASR     : that yeah see it seemed to me that bush was going going to extraordinary lengths to um you know prepare the country for war yeah okay 
+RESTORED: that {FP:uh} yeah {REP:[t]} {EET:[y]} {DM:[uw]} [EET:see] it seemed to me {REP:[r t]} that bush was [REP:going] going to extraordinary lengths to [FP:um] [DM:you] [DM:know] prepare the country for war yeah okay 
+  gold: [(0, 'REP', 'that'), (0, 'FP', 'uh'), (7, 'REP', 'that')] 
+  pred: [(1, 'FP', 'uh', 'inventory'), (2, 'REP', '[t]', 'phones'), (2, 'EET', '[y]', 'phones'), (2, 'DM', '[uw]', 'phones'), (7, 'REP', '[r t]', 'phones')]
+
+REF     : well um you know i guess that it's pretty deep feelings uh i just uh went back and rented uh the movie what is it good morning vietnam 
+ASR     : well um you know i guess that it's pretty deep feelings uh i just went back and rented the movie what is it good morning vietnam 
+RESTORED: well [FP:um] [DM:you] [DM:know] i guess that it's pretty deep feelings [FP:uh] i just {FP:uh} went back and rented {FP:uh} the movie what is it good morning vietnam 
+  gold: [(14, 'FP', 'uh'), (18, 'FP', 'uh')] 
+  pred: [(14, 'FP', 'uh', 'inventory'), (18, 'FP', 'uh', 'inventory')]
+
+REF     : english class where the uh the uh fellow just wouldn't do a- you know the guy's goug- gouging your eyes out what are you going to do you know wait for him to finish me off 
+ASR     : english class where the you know the guy's gouging your eyes out what are you going out do you know wait for him to finish me off 
+RESTORED: english class where {REP:the} {FP:uh} [FS:the] {FS:just won't} {PW:[w uw eh]-} [EET:you] [EET:know] the guy's gouging your eyes out what are you going out do [DM:you] [DM:know] wait for him to finish me off 
+  gold: [(3, 'REP', 'the'), (3, 'FP', 'uh'), (4, 'FP', 'uh'), (4, 'FS', "fellow just wouldn't do"), (4, 'PW', 'a-'), (8, 'PW', 'goug-')] 
+  pred: [(3, 'REP', 'the', 'copy-next'), (3, 'FP', 'uh', 'inventory'), (4, 'FS', "just won't", 'lexicon'), (4, 'PW', '[w uw eh]-', 'phones')]

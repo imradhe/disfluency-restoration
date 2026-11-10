@@ -87,10 +87,11 @@ list of dropped items with their words) are exact. Splits follow the usual Switc
 ## 5. Usage
 
 ```bash
-pip install -r requirements.txt pyarrow g2p_en cmudict nltk soundfile            # CPU torch: --index-url https://download.pytorch.org/whl/cpu
+pip install -r requirements.txt        # CPU-only torch: pip install torch --index-url https://download.pytorch.org/whl/cpu
 python -m disfrestore download
 python -m disfrestore prepare                       # ~75 s, 4 workers → data/processed/{train,dev,test}.jsonl
 python -m disfrestore train --epochs 2              # ELECTRA-small, ~40 min on 4 CPU cores
+python -m disfrestore calibrate                     # picks the prior-correction strength on dev → runs/electra_small/calibration.json
 python -m disfrestore evaluate --split test         # tagging F1, restored items, verbatim WER   (--oracle = gold tags)
 python -m disfrestore fetch-nptel --lecture 108105103 --utterances 100 --clips 1   # Indian-English test audio
 python -m disfrestore infer --audio data/nptel_audio/108105103_lec021_1-100.wav --out outputs/lec021
@@ -100,4 +101,97 @@ python -m pytest -q tests
 `infer` writes `<stem>.json` and `<stem>.txt` with, per window, the ASR text, the **restored phone sequence**, the **restored words** and
 a **tagged** transcript: `{TAG:text}` = restored item, `[TAG:words]` = disfluent word already in the ASR text.
 
-Some of the network hosts used (OpenSLR, huggingface.co and its CDN hosts, download.pytorch.org, NPTEL) may need to be reachable.
+Setup notes: `g2p_en` fetches NLTK data (`cmudict`, `averaged_perceptron_tagger[_eng]`) the first time it is imported; NLTK ≥ 3.10 refuses
+downloads through an HTTP proxy, in which case unzip those packages from `nltk_data` into `~/nltk_data/{corpora,taggers}` yourself. Hosts
+used: OpenSLR (corpus), huggingface.co (+ its CDN hosts; models), download.pytorch.org, nptel.ac.in. Model weights and `data/` are not
+committed (`.gitignore`); retraining takes the commands above.
+
+## 6. Results (one run, one seed, `google/electra-small-discriminator`, 13.5 M parameters)
+
+### 6.1 Simulated Switchboard test split — 7,420 held-out chunks, 138,549 reference words
+
+Verbatim word error rate of the restored transcript against the verbatim reference (the ASR baseline already contains the simulated
+ASR word errors, which restoration does not touch):
+
+| transcript | WER |
+|---|---|
+| plain ASR (disfluencies dropped, simulated ASR errors) | 11.64 % |
+| restored, tagger without calibration | 9.75 % |
+| **restored, tagger + calibration (default)** | **9.20 %** |
+| restored, oracle (gold tags) — ceiling of the phones→words stage | 8.62 % |
+
+Span F1 per type (exact span match; `results/test_calibrated.txt` has precision/recall and the oracle/uncalibrated runs):
+
+| tag | gap-phone spans (restored sounds) | restored items: located F1 | … words correct given located | disfluent words already in the ASR text |
+|---|---|---|---|---|
+| FP filled pause | **0.85** | 0.73 | 0.94 | 0.999 † |
+| BC backchannel | 0.77 | 0.79 | 0.86 | 0.996 † |
+| EX hesitation | 0.54 | 0.56 | 1.00 | 0.95 † |
+| NS non-speech (not restored) | 0.77 | – | – | – |
+| REP repetition | 0.48 | 0.48 | 0.63 | 0.82 |
+| DM discourse marker | 0.58 | 0.66 | 0.69 | 0.73 |
+| EET editing term | 0.44 | 0.46 | 0.60 | 0.58 |
+| RPR repair | 0.35 | 0.35 | 0.22 | 0.27 |
+| FS false start | 0.26 | 0.43 | 0.18 | 0.07 |
+| PW partial word | 0.21 | 0.26 | 0.37 ‡ | 0.99 † |
+| MP mispronounced | – | – | – | 0.00 (19 instances; too rare) |
+| **micro** | **0.62** | **0.56** | **0.77** | **0.82** |
+
+† these words (`uh`, `uh-huh`, `th-`) identify themselves, so such scores say nothing about the phone evidence.
+‡ a fragment counts as right if its spelling is a prefix of the gold one within one letter.
+"Located" = right type in the right gap (a repetition may sit at the equivalent neighbouring gap). The oracle-tag run reaches a located
+micro-F1 of 0.79 — not 1.0 — because 26 % of dropped items are not found in a gap (located recall 0.74): the simulated recogniser deleted a one-phone
+`uh`, or the aligner absorbed it into a neighbour. Calibration (logits − α·log class-weight, α = 1.0 chosen on dev) is worth 0.55 WER
+points; restricting which types are inserted does not help (all types: 9.20 %, no RPR/FS/PW: 9.36 %, filled pauses only: 10.19 %).
+
+### 6.2 Real Indian-English audio — NPTEL, no retuning
+
+Phones from `facebook/wav2vec2-xlsr-53-espeak-cv-ft`, transcript from `openai/whisper-small.en`, windows of 4–14 s
+(outputs in `results/nptel_summary.json`; the audio is not redistributed).
+
+| clip | audio | ASR words | predicted FP / 1,000 words | human-marked fillers |
+|---|---|---|---|---|
+| `108105103_lec021` utt. 1–100 | 486 s | 1,599 | 18.8 | 48 (all `ah`) |
+| `106106049_lec042` utt. 112–151 (control) | 265 s | 551 | 1.8 | 0 |
+
+Whisper wrote none of the 48 `ah`s (0 filler tokens in its 1,567). Against the human markers in lecture 021, the pipeline's 30 predicted filled pauses hit **12 of 48**
+(precision 0.40, recall 0.25, exact position); the lecture whose manual transcript has no fillers gets 1 prediction in 551 words.
+Examples: `…multilayer perceptrons as {FP:uh} for classification purpose` (the human wrote `as ah for classification`); the output also contains
+spurious `{REP:…}` items.
+
+**This is much weaker than the simulated numbers**, and the cause looks like a simulation-to-real gap rather than a bug. Breakdown of the 48
+human fillers by what the pipeline saw at their position: 11 found (12 in the filler check above, which also counts window edges),
+**23 leave no unexplained phone** (the recogniser emitted nothing for the filler, or the aligner absorbed it into a neighbouring word),
+12 leave a gap phone — mostly a single `aa` ([ɑː], the usual Indian-English "ah") — that the tagger left as `O`, and 2 got another tag.
+Training fillers are overwhelmingly schwa-like `uh` (69,814 `uh` vs 353 `ah` in Switchboard).
+Precision is a lower bound: a human may not have marked every filler.
+
+## 7. Limitations
+
+* **Training and the headline numbers are on simulated inputs**: both the ASR transcript and the phones are generated from the Switchboard
+  transcripts. §6.1 is an in-distribution figure; §6.2 shows the real-audio level (filler precision 0.40 / recall 0.25 on one lecture).
+* **Derived types are silver labels** (`REP RPR FS EET DM`), from rules, not Treebank-3 annotation. The model partly learns the rules.
+  `MP` is too rare (341 in the corpus) to learn.
+* **Weak types**: `PW`, `FS`, `RPR` — a 1–2-phone fragment is hard to tell from recogniser noise, and the words of an abandoned clause are
+  rarely recovered right by the lexicon decoder (unigram prior, no language model).
+* Phones of a word the ASR *deleted* are labelled `O`, not restored.
+* One encoder (ELECTRA-small) and one seed, picked for CPU speed; `--encoder bert-base-uncased` etc. are supported but were not run here.
+  No confidence intervals.
+* Whisper's behaviour with fillers varies by model and version; the pipeline assumes the transcript is mostly fluent.
+
+## 8. Next steps (not done)
+
+1. **Indian-English fillers in the simulator**: realise `uh/ah` as [ɑː]/[aː] and long [ə] with accent-dependent probability, then re-train and
+   evaluate on a lecture *not* used above.
+2. **Evidence for fillers with no gap phone**: add an (empty-)gap token per word boundary plus CTC posterior mass / pause duration, so a
+   filler the greedy decoder missed can still be flagged.
+3. Calibrate the recogniser noise model from real phone output; fine-tune on real audio with weak labels from NPTEL manual transcripts.
+4. A bigger encoder on a GPU; a phones→words decoder with a Switchboard language model; plug in Treebank-3/NXT labels for the derived types
+   (the labeller is the only place that needs to change).
+
+## 9. Repository layout
+
+`disfrestore/` — `swb.py` corpus reader · `labeler.py` tags · `simulate.py` ASR/recogniser simulation · `lexicon.py` G2P · `align.py` ·
+`features.py` · `encoding.py` · `model.py` · `train.py` (+ calibration) · `restore.py` · `evaluate.py` · `infer.py` · `nptel.py` · `download.py` ·
+`data.py` · `cli.py`. `tests/` — 30 unit/integration tests. `results/` — evaluation reports, training log, calibration, NPTEL summary.
+Existing scripts of the repo (`forced_align.py`, `switchboard_to_rsml.py`, notebooks) are untouched.

@@ -1,0 +1,70 @@
+{
+ "108105103_lec021_1-100": {
+  "summary": {
+   "audio": "data/nptel_audio/108105103_lec021_1-100.wav",
+   "duration_s": 486.431,
+   "asr_words": 1599,
+   "counts": {
+    "FP": 30,
+    "PW": 1,
+    "REP": 13,
+    "word:RPR": 1,
+    "word:REP": 4,
+    "NS": 5,
+    "RPR": 2
+   },
+   "per_1000_words": {
+    "FP": 18.8,
+    "PW": 0.6,
+    "REP": 8.1,
+    "word:RPR": 0.6,
+    "word:REP": 2.5,
+    "NS": 3.1,
+    "RPR": 1.3
+   },
+   "unknown_ipa": {
+    "\u0255": 1
+   }
+  },
+  "filler_check_vs_human_markers": {
+   "human_fillers": 48,
+   "predicted_FP": 30,
+   "hits": 12,
+   "precision": 0.4,
+   "recall": 0.25,
+   "asr_words": 1599,
+   "tolerance_words": 1
+  }
+ },
+ "106106049_lec042_112-151": {
+  "summary": {
+   "audio": "data/nptel_audio/106106049_lec042_112-151.wav",
+   "duration_s": 264.5390625,
+   "asr_words": 551,
+   "counts": {
+    "RPR": 2,
+    "word:RPR": 3,
+    "NS": 2,
+    "FP": 1,
+    "PW": 1
+   },
+   "per_1000_words": {
+    "RPR": 3.6,
+    "word:RPR": 5.4,
+    "NS": 3.6,
+    "FP": 1.8,
+    "PW": 1.8
+   },
+   "unknown_ipa": {}
+  },
+  "filler_check_vs_human_markers": {
+   "human_fillers": 0,
+   "predicted_FP": 1,
+   "hits": 0,
+   "precision": 0.0,
+   "recall": 0.0,
+   "asr_words": 551,
+   "tolerance_words": 1
+  }
+ }
+}
