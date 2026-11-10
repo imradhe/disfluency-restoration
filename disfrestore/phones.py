@@ -69,7 +69,8 @@ def feature_distance(a: str, b: str) -> float:
         return _CROSS.get((c, v), 1.0)
     (m1, p1, v1), (m2, p2, v2) = _C[a], _C[b]
     manner = min(1.0, abs(m1 - m2) / 4.0)
-    return min(1.0, 0.45 * abs(p1 - p2) / 7.0 + 0.35 * manner + 0.20 * abs(v1 - v2) + 0.05)
+    # a voicing flip (t/d, s/z) is the most common recogniser confusion, then manner, then place of articulation
+    return min(1.0, 0.55 * abs(p1 - p2) / 7.0 + 0.33 * manner + 0.12 * abs(v1 - v2) + 0.05)
 
 
 # substitution cost used by the aligner: even the closest pair costs something, the worst pair stays below del+ins

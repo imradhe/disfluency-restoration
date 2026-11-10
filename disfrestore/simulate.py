@@ -33,6 +33,10 @@ ITEM_TAGS = set(RESTORABLE) | {"DM", "EET"}
 JUNK = ["hh", "ah", "m", "n", "ae", "s", "sh", "ng", "eh", "aa", "uw", "f"]  # what recognisers hallucinate on laughter/noise
 FUNCTION_WORDS = ["the", "a", "and", "to", "of", "i", "you", "it", "that", "in", "is", "so"]
 WEAK = {"ah", "ih", "t", "d", "hh", "dh"}  # recognisers lose these most easily
+# systematic Indian-English realisations a recogniser reports (phone -> (replacement, probability at accent strength 1)):
+# dental fricatives become stops, v/w merge, z devoices, tense/lax and open/mid vowels are confused
+ACCENT = {"th": ("t", 0.6), "dh": ("d", 0.6), "v": ("w", 0.35), "w": ("v", 0.2), "z": ("s", 0.3), "ae": ("eh", 0.2),
+          "ao": ("aa", 0.25), "ey": ("eh", 0.2), "ow": ("ao", 0.2), "ih": ("iy", 0.15), "uh": ("uw", 0.2)}
 
 
 @dataclass
@@ -42,12 +46,14 @@ class Profile:
     asr_sub: float
     asr_del: float
     asr_ins: float
+    accent: float = 0.0  # 0 = none; otherwise the strength of systematic accent substitutions (see ACCENT)
 
 
 def sample_profile(rng: random.Random) -> Profile:
     r = rng.random()
     verb = 0.0 if r < 0.5 else rng.uniform(0.1, 0.5) if r < 0.85 else rng.uniform(0.5, 0.9)
-    return Profile(verb, rng.random(), rng.uniform(0, 0.08), rng.uniform(0, 0.03), rng.uniform(0, 0.01))
+    accent = 0.0 if rng.random() < 0.4 else rng.uniform(0.3, 1.0)
+    return Profile(verb, rng.random(), rng.uniform(0, 0.08), rng.uniform(0, 0.03), rng.uniform(0, 0.01), accent)
 
 
 # --------------------------------------------------------------------------------------------------------------
@@ -103,7 +109,8 @@ def _pronunciation(u: Unit, swb: SwbDict, g2p: G2P, rng: random.Random) -> list[
 
 def simulate_recognizer(units: list[Unit], swb: SwbDict, g2p: G2P, prof: Profile, rng: random.Random) -> list[RecPhone]:
     n = prof.noise
-    p_sub, p_del, p_ins = 0.03 + 0.20 * n, 0.02 + 0.12 * n, 0.005 + 0.05 * n
+    # real accented speech through a multilingual CTC recogniser is substitution-heavy and deletion-light
+    p_sub, p_del, p_ins = 0.05 + 0.22 * n, 0.02 + 0.10 * n, 0.005 + 0.04 * n
     out: list[RecPhone] = []
     for u in units:
         if u.tag == "NS":
@@ -111,6 +118,8 @@ def simulate_recognizer(units: list[Unit], swb: SwbDict, g2p: G2P, prof: Profile
         else:
             phones = []
             for p in _pronunciation(u, swb, g2p, rng):
+                if prof.accent and p in ACCENT and rng.random() < ACCENT[p][1] * prof.accent:
+                    p = ACCENT[p][0]
                 if rng.random() < p_del * (1.5 if p in WEAK else 1.0):
                     continue
                 if rng.random() < p_sub:
@@ -278,6 +287,6 @@ def make_example(units: list[Unit], swb: SwbDict, g2p: G2P, rng: random.Random, 
         "id": ex_id, "words": words, "wl": wl, "wf": [[round(x, 4) for x in f] for f in wf],
         "gp": gp, "gf": [[[round(x, 4) for x in f] for f in run] for run in gfeat], "gl": gl,
         "items": [{k: v for k, v in it.items() if k not in ("units",)} for it in items],
-        "ref": ref, "meta": {"verbosity": round(prof.verbosity, 3), "noise": round(prof.noise, 3),
+        "ref": ref, "meta": {"verbosity": round(prof.verbosity, 3), "noise": round(prof.noise, 3), "accent": round(prof.accent, 3),
                               "n_rec": len(rec), "cost": round(al.cost, 2)},
     }
